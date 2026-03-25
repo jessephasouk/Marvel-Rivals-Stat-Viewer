@@ -1,136 +1,155 @@
 # Marvel Rivals Stat Viewer
 
-A full-stack project for searching and visualizing Marvel Rivals player performance data.
+A full-stack dashboard for searching and visualizing Marvel Rivals player performance data.
 
-This repository is intentionally designed as an interview-friendly engineering project: it demonstrates UI composition, asynchronous data access, API integration strategy, and practical architecture trade-offs between direct API usage and a backend proxy.
+The app provides:
+
+- Player profile and rank info
+- Peak rank history by season
+- Overall performance metrics (wins, K/D, KDA, MVP rate, per-minute stats)
+- Hero-level breakdown
+- Role-level breakdown
 
 ## Table of Contents
 
-- [1) Project Overview](#1-project-overview)
-- [2) Architecture at a Glance](#2-architecture-at-a-glance)
-- [3) Tech Stack and Why Each Technology Was Chosen](#3-tech-stack-and-why-each-technology-was-chosen)
-- [4) Key Design Decisions and Trade-offs](#4-key-design-decisions-and-trade-offs)
-- [5) Data Flow](#5-data-flow)
-- [6) Project Structure](#6-project-structure)
-- [7) Getting Started](#7-getting-started)
-- [8) Scripts](#8-scripts)
-- [9) API Surface](#9-api-surface)
-- [10) Interview Walkthrough Talking Points](#10-interview-walkthrough-talking-points)
-- [11) Future Improvements](#11-future-improvements)
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Technology Usage (How Each Tool Is Used Here)](#technology-usage-how-each-tool-is-used-here)
+- [Implementation Snippets](#implementation-snippets)
+- [Data Flow](#data-flow)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Available Scripts](#available-scripts)
+- [Backend API](#backend-api)
+- [Future Improvements](#future-improvements)
 
-## 1) Project Overview
+## Overview
 
-The application allows a user to enter a Marvel Rivals username and view:
+This project is structured as a React + TypeScript frontend with an ASP.NET Core backend.
 
-- Player profile and rank information
-- Peak rank history across seasons
-- Overall gameplay metrics (wins, K/D, KDA, MVP rate, per-minute metrics)
-- Hero-level performance breakdown
-- Role-level performance breakdown
+The frontend currently performs player lookups directly through the `mrivals` package. The backend includes a lightweight proxy endpoint that can be used when you want server-side mediation (for example, request shaping, rate-limit controls, or centralized logging).
 
-The frontend is built for fast iteration and responsive UI rendering.  
-The backend is a .NET 8 Minimal API service that currently exposes a health endpoint and an optional proxy endpoint for player lookups.
-
-## 2) Architecture at a Glance
+## Architecture
 
 ```text
-User Browser
-    |
-    v
+Browser
+  |
+  v
 React + TypeScript frontend (Vite)
-    |                         \
-    | direct integration       \ optional proxy path
-    v                           v
-mrivals package/API          ASP.NET Core Minimal API
-                                  |
-                                  v
-                         External stats endpoint
-                         https://mrivals.vercel.app/player/{username}
+  |                          \
+  | direct lookup             \ optional proxy path
+  v                            v
+mrivals API client         ASP.NET Core Minimal API
+                                 |
+                                 v
+                   https://mrivals.vercel.app/player/{username}
 ```
 
-### Current operational model
-
-- Primary path in the UI: direct data fetch through `mrivals` (`API.fetchUser(...)`)
-- Secondary path: backend proxy endpoint available for extension, CORS mediation, or future auth/rate-limit logic
-
-## 3) Tech Stack and Why Each Technology Was Chosen
+## Technology Usage (How Each Tool Is Used Here)
 
 ### Frontend
 
 - React 18
-  - Chosen for component-driven UI, predictable state updates, and strong ecosystem support.
+  - Used to build a state-driven single-page dashboard with tabbed views (`info`, `overview`, `heroes`, `roles`).
+
 - TypeScript
-  - Adds compile-time safety and improves confidence when evolving UI logic and data contracts.
+  - Used across frontend source for safer component/state logic and better editor support.
+
 - Vite
-  - Fast startup and rebuild times for better development feedback loops.
+  - Used as the dev server and build pipeline.
+  - Configured with React plugin, shared `public` directory, and port `3000`.
+
 - Tailwind CSS
-  - Utility-first styling for rapid, consistent visual iteration without large custom CSS files.
-- `lucide-react`
-  - Lightweight icon set that keeps stat cards and sections visually scannable.
+  - Used for nearly all styling directly in JSX (`bg-slate-*`, `text-*`, spacing, layout, responsive grids).
+
 - `mrivals`
-  - Domain-specific library that provides typed access patterns for player data retrieval and structured stats methods.
+  - Used as the player stats client: `API.fetchUser(username)` returns a user object that is transformed into section-specific data (`info`, `peakRank`, `overview`, `heroes`, `roles`).
+
+- `lucide-react`
+  - Used for visual iconography in stat cards, tabs, and headers.
 
 ### Backend
 
-- ASP.NET Core (.NET 8) Minimal API
-  - Keeps the API surface small and clear for lightweight endpoints.
-  - Easy to extend into richer service layers when needed.
-- `HttpClient` via dependency injection
-  - Follows recommended .NET resource management patterns instead of ad hoc client creation.
+- ASP.NET Core Minimal API (.NET 8)
+  - Hosts two simple endpoints:
+    - `GET /` health status
+    - `GET /api/player/{username}` proxy endpoint
 
-## 4) Key Design Decisions and Trade-offs
+- `HttpClient` from DI
+  - Registered with `builder.Services.AddHttpClient()` and injected into the route handler for outbound requests.
 
-### Decision: Keep frontend and backend decoupled
+- CORS
+  - Default permissive policy enabled to simplify local development and cross-origin requests.
 
-- Why:
-  - UI can evolve independently from backend API shape.
-  - Backend remains optional in the current version.
-- Trade-off:
-  - Two integration paths exist (direct + proxy), so documentation and consistency matter.
+## Implementation Snippets
 
-### Decision: Single-page, state-driven dashboard in one core component
+### 1) Frontend player fetch + state fan-out (`frontend/src/App.tsx`)
 
-- Why:
-  - Fast to build and easy to demonstrate end-to-end flow in an interview.
-  - All view tabs (info, overview, heroes, roles) share the same fetched player state.
-- Trade-off:
-  - `App.tsx` is currently large; future refactors should split into feature components and typed domain models.
+```tsx
+const user = await API.fetchUser(username);
 
-### Decision: Utility-first styling with Tailwind
+setPlayerInfo(user.info());
+setPeakRanks(user.peakRank());
+setOverview(user.overview());
+setHeroes(user.heroes());
+setRoles(user.roles());
+```
 
-- Why:
-  - Rapid UI iteration and consistent design language.
-- Trade-off:
-  - Class-heavy JSX can be verbose; component extraction helps long-term maintainability.
+This single fetch drives all tabs without additional network requests.
 
-### Decision: Minimal backend surface first
+### 2) Backend proxy endpoint (`backend/Program.cs`)
 
-- Why:
-  - Avoids over-engineering before requirements require additional API orchestration.
-- Trade-off:
-  - Advanced production concerns (caching, retries, auth, rate limiting, observability) are intentionally deferred.
+```csharp
+app.MapGet("/api/player/{username}", async (string username, HttpClient http) =>
+{
+    var response = await http.GetAsync($"https://mrivals.vercel.app/player/{username}");
+    if (!response.IsSuccessStatusCode)
+        return Results.NotFound(new { error = "Player not found" });
 
-## 5) Data Flow
+    var content = await response.Content.ReadAsStringAsync();
+    var data = JsonSerializer.Deserialize<JsonElement>(content);
+    return Results.Ok(data);
+});
+```
+
+This keeps a server-side integration point available without forcing the frontend to use it today.
+
+### 3) Vite config with shared public assets (`frontend/vite.config.ts`)
+
+```ts
+export default defineConfig({
+  plugins: [react()],
+  publicDir: '../public',
+  server: {
+    port: 3000,
+    host: '0.0.0.0',
+  }
+})
+```
+
+This enables static assets in the root `public` folder (such as background images) to be served by the frontend app.
+
+## Data Flow
 
 1. User enters a username and triggers search.
-2. Frontend sets loading state and clears previous player data.
-3. Frontend calls `API.fetchUser(username)` from `mrivals`.
-4. The returned user object is transformed into view models:
+2. Frontend resets current data and sets loading state.
+3. Frontend calls `API.fetchUser(username)`.
+4. Response is split into separate sections:
    - `info()`
    - `peakRank()`
    - `overview()`
    - `heroes()`
    - `roles()`
-5. UI renders tabbed statistical views from in-memory state.
-6. Errors are surfaced in the UI with a clear message.
+5. UI renders section tabs from in-memory state.
+6. Any lookup failure is shown as a user-facing error message.
 
-Backend proxy flow (optional):
+Optional backend path:
 
-1. Client calls `GET /api/player/{username}` on local backend.
-2. Backend forwards request to external stats endpoint.
-3. Backend returns normalized success or error response.
+1. Client calls `GET /api/player/{username}`.
+2. Backend forwards to external endpoint.
+3. Backend returns normalized JSON/error response.
 
-## 6) Project Structure
+## Project Structure
 
 ```text
 Marvel-Rivals-Stat-Viewer/
@@ -148,16 +167,14 @@ Marvel-Rivals-Stat-Viewer/
     tailwind.config.js
     postcss.config.js
   public/
-    (shared static assets used by frontend)
-  package.json              # root workspace scripts
+  package.json
   MarvelRivalsTracker.sln
 ```
 
-## 7) Getting Started
+## Getting Started
 
 ### Prerequisites
 
-- Git
 - Node.js 18+
 - .NET 8 SDK
 
@@ -169,9 +186,7 @@ From repository root:
 npm run install:all
 ```
 
-This installs frontend npm packages and restores backend NuGet packages through the solution.
-
-### Run locally (development)
+### Run locally
 
 Use two terminals from repository root.
 
@@ -187,68 +202,42 @@ Terminal 2 (backend):
 npm run backend
 ```
 
-Default endpoints:
+Default local endpoints:
 
 - Frontend: `http://localhost:3000`
 - Backend: `http://localhost:5000`
 
-## 8) Scripts
+## Available Scripts
 
-Root `package.json` scripts:
+Root `package.json`:
 
 - `npm run install:all`  
-  Installs frontend dependencies and runs `dotnet restore` for the solution.
+  Installs frontend dependencies and restores backend packages via solution restore.
+
 - `npm run dev`  
-  Starts Vite dev server from `frontend`.
+  Runs frontend dev server (`vite`) from `frontend`.
+
 - `npm run build`  
-  Runs frontend TypeScript compilation and production build.
+  Runs frontend TypeScript compile + production build.
+
 - `npm run preview`  
-  Previews the built frontend bundle.
+  Serves the built frontend bundle for preview.
+
 - `npm run backend`  
-  Runs ASP.NET Core backend project.
+  Runs the ASP.NET Core backend project.
 
-## 9) API Surface
-
-Backend endpoints:
+## Backend API
 
 - `GET /`  
-  Health check endpoint returning a simple status string.
+  Health/status response.
 
 - `GET /api/player/{username}`  
-  Optional proxy endpoint that forwards player lookup to the external stats source.
+  Optional proxy endpoint to fetch player stats from the upstream source.
 
-## 10) Interview Walkthrough Talking Points
+## Future Improvements
 
-Use this sequence when explaining the project to technical interviewers:
-
-1. Problem framing
-   - “I wanted a practical full-stack dashboard that consumes real player-performance data and presents it in a way that supports fast comparison and insight.”
-
-2. Architecture rationale
-   - “I used React + TypeScript for fast, safe frontend iteration, and a .NET 8 Minimal API backend as an extension point for API mediation and production concerns.”
-
-3. Data modeling and UI
-   - “After one user fetch, I partition data into profile, peak rank, overview, hero stats, and role stats so each view can render independently without repeated network calls.”
-
-4. Trade-offs and next steps
-   - “I optimized for clarity and delivery speed first. Next refactor would split `App.tsx` into typed feature modules and add server-side caching plus request controls.”
-
-5. Engineering maturity
-   - “The project already demonstrates layered architecture potential, DI usage in backend, strict TypeScript mode, and repeatable root-level workflows.”
-
-## 11) Future Improvements
-
-- Refactor large frontend component into:
-  - `PlayerHeader`
-  - `OverviewTab`
-  - `HeroStatsTab`
-  - `RoleStatsTab`
-- Replace `any` state types with explicit interfaces for stronger contract safety.
-- Add backend resiliency features:
-  - Response caching
-  - Retry/backoff strategy for upstream calls
-  - Structured logging and observability
-- Add automated tests:
-  - Frontend component tests for tab rendering and error states
-  - Backend endpoint tests for proxy behavior and failure paths
-- Add deployment docs and environment variable strategy for production hosting.
+- Split `App.tsx` into feature-focused components (`PlayerHeader`, `OverviewTab`, `HeroStatsTab`, `RoleStatsTab`)
+- Replace remaining `any` types with explicit interfaces
+- Add backend resiliency (cache, retry/backoff, structured logging)
+- Add automated tests for frontend views and backend endpoint behavior
+- Add deployment and environment configuration documentation
