@@ -1,41 +1,50 @@
-# Node.js
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Build output
-dist/
-build/
-out/
-
-# IDE files
+# ------------------------------------------------------------
+# OS / Editor
+# ------------------------------------------------------------
+.DS_Store
+Thumbs.db
 .vscode/
 .idea/
 *.sublime-workspace
 *.sublime-project
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Environment files
-.env
-.env.local
-.env.*.local
-
-# Logs
-*.log
-
-# Misc
 *.swp
 *.bak
 *.tmp
 
-# Coverage
+# ------------------------------------------------------------
+# Environment / Logs
+# ------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ------------------------------------------------------------
+# Frontend (Vite/Node) - root and nested frontend folder
+# ------------------------------------------------------------
+node_modules/
+frontend/node_modules/
+dist/
+build/
+out/
 coverage/
 *.lcov
+frontend/dist/
 
-# Dependency directories
+# ------------------------------------------------------------
+# .NET backend
+# ------------------------------------------------------------
+backend/bin/
+backend/obj/
+*.user
+*.rsuser
+
+# ------------------------------------------------------------
+# Misc dependency directories
+# ------------------------------------------------------------
 bower_components/
 jspm_packages/
